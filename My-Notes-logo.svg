@@ -1,0 +1,97 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#19191e"/>
+      <stop offset=".5" stop-color="#08080b"/>
+      <stop offset="1" stop-color="#100d11"/>
+    </linearGradient>
+    <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#fff"/>
+      <stop offset=".5" stop-color="#d9d8e0"/>
+      <stop offset="1" stop-color="#858591"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#ff6877"/>
+      <stop offset=".5" stop-color="#f32b47"/>
+      <stop offset="1" stop-color="#a90e29"/>
+    </linearGradient>
+    <linearGradient id="pencil" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#777782"/>
+      <stop offset=".45" stop-color="#292930"/>
+      <stop offset="1" stop-color="#0c0c11"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="100%" cy="0%" r="100%">
+      <stop stop-color="#9b1c30" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#9b1c30" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="24"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect x="38" y="38" width="948" height="948" rx="190" fill="url(#bg)"/>
+  <rect x="38" y="38" width="948" height="948" rx="190" fill="url(#glow)"/>
+  <path d="M70 180 Q250 35 510 40 H800 Q950 40 984 180"
+        fill="none" stroke="#e82c47" stroke-width="5" opacity=".6"
+        filter="url(#softGlow)"/>
+  <rect x="40" y="40" width="944" height="944" rx="188"
+        fill="none" stroke="url(#red)" stroke-width="3" opacity=".8"/>
+
+  <!-- Document shadow -->
+  <path d="M326 245 H560 L690 375 V700
+           Q690 785 605 785 H326
+           Q240 785 240 700 V330
+           Q240 245 326 245Z"
+        fill="#000" stroke="#000" stroke-width="18"
+        stroke-linejoin="round" opacity=".5"/>
+
+  <!-- Document outline -->
+  <path d="M326 245 H560 L690 375 V700
+           Q690 785 605 785 H326
+           Q240 785 240 700 V330
+           Q240 245 326 245Z"
+        fill="#09090d" stroke="url(#silver)" stroke-width="29"
+        stroke-linejoin="round"/>
+
+  <!-- Folded page corner -->
+  <path d="M560 253 V334 Q560 375 601 375 H682"
+        fill="none" stroke="url(#silver)" stroke-width="25"
+        stroke-linejoin="round"/>
+
+  <!-- Document lines -->
+  <g fill="none" stroke="url(#silver)" stroke-width="31"
+     stroke-linecap="round">
+    <path d="M335 434 H560"/>
+    <path d="M335 518 H580"/>
+    <path d="M335 602 H510"/>
+  </g>
+
+  <!-- Pencil: diagonal, matching the original icon -->
+  <g transform="rotate(44 710 625)">
+    <!-- Pencil body -->
+    <path d="M662 474 H758 V744 L710 827 L662 744Z"
+          fill="url(#pencil)" stroke="#777782" stroke-width="4"
+          stroke-linejoin="round"/>
+    <path d="M662 474 H710 V808 L710 827 L662 744Z"
+          fill="#b0afbb" opacity=".13"/>
+
+    <!-- Red eraser cap -->
+    <path d="M662 474 H758 V522 H662Z"
+          fill="url(#red)"/>
+    <path d="M669 477 H751" stroke="#ff9ba5"
+          stroke-width="4" stroke-linecap="round" opacity=".8"/>
+
+    <!-- Pencil tip -->
+    <path d="M662 744 H758 L710 827Z"
+          fill="url(#red)" stroke="#fa5368" stroke-width="3"
+          stroke-linejoin="round"/>
+    <path d="M698 806 L710 827 L722 806Z" fill="#24242b"/>
+  </g>
+
+  <!-- Subtle red edge light -->
+  <path d="M43 760 V800 Q43 975 220 981"
+        fill="none" stroke="#f52d49" stroke-width="4"
+        stroke-linecap="round" opacity=".8"/>
+</svg>
