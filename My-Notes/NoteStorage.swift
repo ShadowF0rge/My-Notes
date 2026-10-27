@@ -1,16 +1,22 @@
 
 import Foundation
+import AppKit
 
 enum NoteStorageError: LocalizedError {
     case unsupportedFile
     case outsideNotesDirectory
+    case fileAlreadyExists
 
     var errorDescription: String? {
         switch self {
         case .unsupportedFile:
             return "Dieser Dateityp wird nicht unterstützt."
+
         case .outsideNotesDirectory:
             return "Die Datei liegt außerhalb des internen Notizordners."
+
+        case .fileAlreadyExists:
+            return "Eine Datei mit diesem Namen existiert bereits."
         }
     }
 }
@@ -21,7 +27,14 @@ final class NoteStorage {
     private let fileManager = FileManager.default
 
     let supportedExtensions: Set<String> = [
-        "txt", "py", "java", "js", "html", "css", "json", "md"
+        "txt",
+        "py",
+        "java",
+        "js",
+        "html",
+        "css",
+        "json",
+        "md"
     ]
 
     private init() {
@@ -33,7 +46,10 @@ final class NoteStorage {
             for: .applicationSupportDirectory,
             in: .userDomainMask
         )[0]
-        .appendingPathComponent("MyNotes", isDirectory: true)
+        .appendingPathComponent(
+            "MyNotes",
+            isDirectory: true
+        )
     }
 
     private func prepareDirectory() {
@@ -44,40 +60,13 @@ final class NoteStorage {
             )
         } catch {
             NSLog(
-                "MyNotes: Notizordner konnte nicht erstellt werden: %@",
+                "My Notes: Notizordner konnte nicht erstellt werden: %@",
                 error.localizedDescription
             )
         }
     }
-    func renameNote(at url: URL, to newTitle: String) throws -> URL {
-        let safeTitle = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard !safeTitle.isEmpty else {
-            return url
-        }
-
-        let newURL = url
-            .deletingLastPathComponent()
-            .appendingPathComponent(safeTitle)
-            .appendingPathExtension(url.pathExtension)
-
-        guard newURL != url else {
-            return url
-        }
-
-        guard !FileManager.default.fileExists(atPath: newURL.path) else {
-            throw NSError(
-                domain: "NoteStorage",
-                code: 1,
-                userInfo: [
-                    NSLocalizedDescriptionKey: "Eine Notiz mit diesem Titel existiert bereits."
-                ]
-            )
-        }
-
-        try FileManager.default.moveItem(at: url, to: newURL)
-        return newURL
-    }
+    // MARK: - Validation
 
     private func isInternalURL(_ url: URL) -> Bool {
         let directory = notesDirectory.standardizedFileURL
@@ -92,63 +81,7 @@ final class NoteStorage {
         )
     }
 
-    // MARK: - Create
-
-    func createNote(title: String, fileType: String) throws -> URL {
-        let ext = fileType
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-            .replacingOccurrences(of: ".", with: "")
-
-        guard supportedExtensions.contains(ext) else {
-            throw NoteStorageError.unsupportedFile
-        }
-
-        try fileManager.createDirectory(
-            at: notesDirectory,
-            withIntermediateDirectories: true
-        )
-
-        let invalidCharacters = CharacterSet(
-            charactersIn: "/:\\?%*|\"<>"
-        )
-
-        let cleanedTitle = title
-            .components(separatedBy: invalidCharacters)
-            .joined(separator: "-")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let baseName = cleanedTitle.isEmpty
-            ? "Neue Notiz"
-            : cleanedTitle
-
-        var candidate = notesDirectory
-            .appendingPathComponent(baseName)
-            .appendingPathExtension(ext)
-
-        var suffix = 2
-
-        while fileManager.fileExists(atPath: candidate.path) {
-            candidate = notesDirectory
-                .appendingPathComponent("\(baseName) \(suffix)")
-                .appendingPathExtension(ext)
-
-            suffix += 1
-        }
-
-        guard fileManager.createFile(
-            atPath: candidate.path,
-            contents: Data()
-        ) else {
-            throw CocoaError(.fileWriteUnknown)
-        }
-
-        return candidate
-    }
-
-    // MARK: - Save
-
-    func save(text: String, to url: URL) throws {
+    private func validateNoteURL(_ url: URL) throws {
         guard isInternalURL(url) else {
             throw NoteStorageError.outsideNotesDirectory
         }
@@ -156,11 +89,53 @@ final class NoteStorage {
         guard isSupportedFile(url) else {
             throw NoteStorageError.unsupportedFile
         }
+    }
 
-        try fileManager.createDirectory(
-            at: notesDirectory,
-            withIntermediateDirectories: true
+    // MARK: - Create
+
+    func createNote(
+        title: String,
+        fileType: String
+    ) throws -> URL {
+        let normalizedExtension = fileType.lowercased()
+
+        guard supportedExtensions.contains(normalizedExtension) else {
+            throw NoteStorageError.unsupportedFile
+        }
+
+        let safeTitle = title.trimmingCharacters(
+            in: .whitespacesAndNewlines
         )
+
+        let finalTitle = safeTitle.isEmpty
+            ? "Unbenannte Notiz"
+            : safeTitle
+
+        let destinationURL = notesDirectory
+            .appendingPathComponent(finalTitle)
+            .appendingPathExtension(normalizedExtension)
+
+        guard !fileManager.fileExists(
+            atPath: destinationURL.path
+        ) else {
+            throw NoteStorageError.fileAlreadyExists
+        }
+
+        try Data().write(
+            to: destinationURL,
+            options: .atomic
+        )
+
+        return destinationURL
+    }
+
+    // MARK: - Save
+
+    func save(
+        text: String,
+        to url: URL
+    ) throws {
+        try validateNoteURL(url)
 
         try Data(text.utf8).write(
             to: url,
@@ -171,13 +146,7 @@ final class NoteStorage {
     // MARK: - Load
 
     func load(from url: URL) throws -> String {
-        guard isInternalURL(url) else {
-            throw NoteStorageError.outsideNotesDirectory
-        }
-
-        guard isSupportedFile(url) else {
-            throw NoteStorageError.unsupportedFile
-        }
+        try validateNoteURL(url)
 
         return try String(
             contentsOf: url,
@@ -185,40 +154,97 @@ final class NoteStorage {
         )
     }
 
+    // MARK: - Rename
+
+    func renameNote(
+        at url: URL,
+        to newTitle: String
+    ) throws -> URL {
+        try validateNoteURL(url)
+
+        let safeTitle = newTitle.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+
+        guard !safeTitle.isEmpty else {
+            return url
+        }
+
+        let destinationURL = notesDirectory
+            .appendingPathComponent(safeTitle)
+            .appendingPathExtension(url.pathExtension)
+
+        if url.standardizedFileURL == destinationURL.standardizedFileURL {
+            return url
+        }
+
+        guard !fileManager.fileExists(
+            atPath: destinationURL.path
+        ) else {
+            throw NoteStorageError.fileAlreadyExists
+        }
+
+        try fileManager.moveItem(
+            at: url,
+            to: destinationURL
+        )
+
+        return destinationURL
+    }
+
+    // MARK: - Trash
+
+    func trashNote(at url: URL) throws {
+        try validateNoteURL(url)
+
+        guard fileManager.fileExists(atPath: url.path) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+
+        try fileManager.trashItem(
+            at: url,
+            resultingItemURL: nil
+        )
+    }
+
     // MARK: - List notes
 
     func listNotes() -> [URL] {
         do {
-            try fileManager.createDirectory(
-                at: notesDirectory,
-                withIntermediateDirectories: true
-            )
-
             let urls = try fileManager.contentsOfDirectory(
                 at: notesDirectory,
-                includingPropertiesForKeys: [.isRegularFileKey],
+                includingPropertiesForKeys: [
+                    .isRegularFileKey,
+                    .contentModificationDateKey
+                ],
                 options: [.skipsHiddenFiles]
             )
 
             return urls
+                .filter { isSupportedFile($0) }
                 .filter { url in
-                    guard isSupportedFile(url),
-                          let values = try? url.resourceValues(
-                              forKeys: [.isRegularFileKey]
-                          ) else {
-                        return false
-                    }
-
-                    return values.isRegularFile == true
+                    (try? url.resourceValues(
+                        forKeys: [.isRegularFileKey]
+                    ).isRegularFile) == true
                 }
                 .sorted {
-                    $0.lastPathComponent.localizedCaseInsensitiveCompare(
-                        $1.lastPathComponent
-                    ) == .orderedAscending
+                    let firstDate = (
+                        try? $0.resourceValues(
+                            forKeys: [.contentModificationDateKey]
+                        ).contentModificationDate
+                    ) ?? .distantPast
+
+                    let secondDate = (
+                        try? $1.resourceValues(
+                            forKeys: [.contentModificationDateKey]
+                        ).contentModificationDate
+                    ) ?? .distantPast
+
+                    return firstDate > secondDate
                 }
         } catch {
             NSLog(
-                "MyNotes: Notizen konnten nicht geladen werden: %@",
+                "My Notes: Notizen konnten nicht geladen werden: %@",
                 error.localizedDescription
             )
 
@@ -229,20 +255,20 @@ final class NoteStorage {
     // MARK: - Search
 
     func searchNotes(query: String) -> [URL] {
-        let trimmedQuery = query.trimmingCharacters(
+        let allNotes = listNotes()
+
+        let normalizedQuery = query.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
 
-        let notes = listNotes()
-
-        guard !trimmedQuery.isEmpty else {
-            return notes
+        guard !normalizedQuery.isEmpty else {
+            return allNotes
         }
 
-        return notes.filter {
-            $0.deletingPathExtension()
+        return allNotes.filter { url in
+            url.deletingPathExtension()
                 .lastPathComponent
-                .localizedCaseInsensitiveContains(trimmedQuery)
+                .localizedCaseInsensitiveContains(normalizedQuery)
         }
     }
 }

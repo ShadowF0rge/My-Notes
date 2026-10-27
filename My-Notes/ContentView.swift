@@ -3,7 +3,14 @@ import SwiftUI
 import AppKit
 
 private enum NoteFileType: String, CaseIterable, Identifiable {
-    case txt, py, java, js, html, css, json, md
+    case txt
+    case py
+    case java
+    case js
+    case html
+    case css
+    case json
+    case md
 
     var id: String { rawValue }
 
@@ -23,16 +30,59 @@ private enum NoteFileType: String, CaseIterable, Identifiable {
     var isCode: Bool {
         self != .txt && self != .md
     }
+
+    var symbol: String {
+        switch self {
+        case .txt: return "doc.text"
+        case .py: return "chevron.left.forwardslash.chevron.right"
+        case .java: return "cup.and.saucer"
+        case .js: return "curlybraces"
+        case .html: return "chevron.left.forwardslash.chevron.right"
+        case .css: return "paintbrush"
+        case .json: return "curlybraces"
+        case .md: return "text.alignleft"
+        }
+    }
 }
 
 private enum NoteTheme {
-    static let background = Color(red: 0.075, green: 0.072, blue: 0.078)
-    static let sidebar = Color(red: 0.095, green: 0.088, blue: 0.095)
-    static let editor = Color(red: 0.085, green: 0.078, blue: 0.085)
-    static let selected = Color(red: 0.25, green: 0.105, blue: 0.12)
-    static let accent = Color(red: 0.72, green: 0.34, blue: 0.38)
-    static let secondary = Color(red: 0.58, green: 0.56, blue: 0.59)
-    static let text = Color(red: 0.89, green: 0.87, blue: 0.89)
+    static let background = Color(
+        red: 0.075,
+        green: 0.07,
+        blue: 0.08
+    )
+
+    static let sidebar = Color(
+        red: 0.09,
+        green: 0.085,
+        blue: 0.095
+    )
+
+    static let surface = Color(
+        red: 0.12,
+        green: 0.11,
+        blue: 0.12
+    )
+
+    static let accent = Color(
+        red: 0.78,
+        green: 0.38,
+        blue: 0.42
+    )
+
+    static let selection = Color(
+        red: 0.22,
+        green: 0.105,
+        blue: 0.12
+    )
+
+    static let primaryText = Color(
+        red: 0.91,
+        green: 0.89,
+        blue: 0.91
+    )
+
+    static let secondaryText = Color.secondary
 }
 
 struct PaletteCommand: Identifiable {
@@ -43,15 +93,17 @@ struct PaletteCommand: Identifiable {
 }
 
 struct ContentView: View {
+    private let storage = NoteStorage.shared
+
     @State private var title = ""
     @State private var noteText = ""
     @State private var fileType: NoteFileType = .txt
-
     @State private var currentFileURL: URL?
+
     @State private var saveStatus = "Bereit"
     @State private var saveError: String?
 
-    @State private var fontSize = 14.0
+    @State private var fontSize: Double = 14
     @State private var fontName = "Helvetica Neue"
     @State private var isFontSizePopoverPresented = false
 
@@ -62,9 +114,6 @@ struct ContentView: View {
     @State private var isDirty = false
     @State private var isLoadingNote = false
     @State private var searchFocused = false
-
-    private let storage = NoteStorage.shared
-    private let palette = CommandPaletteController.shared
 
     private let standardFonts = [
         "Helvetica Neue",
@@ -80,6 +129,10 @@ struct ContentView: View {
         "Monaco",
         "Courier New"
     ]
+
+    private var availableFonts: [String] {
+        fileType.isCode ? codeFonts : standardFonts
+    }
 
     private var paletteCommands: [PaletteCommand] {
         [
@@ -98,19 +151,25 @@ struct ContentView: View {
             PaletteCommand(
                 id: "save",
                 title: "Speichern",
-                symbol: "checkmark",
+                symbol: "square.and.arrow.down",
                 shortcut: "⌘ S"
             ),
             PaletteCommand(
+                id: "delete",
+                title: "In den Papierkorb verschieben",
+                symbol: "trash",
+                shortcut: "⌘ D"
+            ),
+            PaletteCommand(
                 id: "font",
-                title: "Schriftgröße ändern",
-                symbol: "textformat.size",
+                title: "Schriftart ändern",
+                symbol: "textformat",
                 shortcut: ""
             ),
             PaletteCommand(
                 id: "filetype",
                 title: "Dateityp ändern",
-                symbol: "doc.text",
+                symbol: "doc.badge.gearshape",
                 shortcut: ""
             )
         ]
@@ -119,45 +178,60 @@ struct ContentView: View {
     var body: some View {
         HStack(spacing: 0) {
             sidebar
+
+            Rectangle()
+                .fill(Color.white.opacity(0.04))
+                .frame(width: 1)
+
             editor
         }
-        .frame(minWidth: 760, minHeight: 480)
+        .frame(minWidth: 680, minHeight: 440)
         .background(NoteTheme.background)
-        .foregroundStyle(NoteTheme.text)
         .preferredColorScheme(.dark)
         .onAppear {
             refreshNotes()
         }
         .onChange(of: noteText) {
-            if !isLoadingNote {
-                markChanged()
-            }
+            markAsChanged()
         }
         .onChange(of: title) {
-            if !isLoadingNote {
-                markChanged()
-            }
+            markAsChanged()
         }
         .onChange(of: searchQuery) {
             refreshNotes()
         }
         .onReceive(
-            NotificationCenter.default.publisher(for: .newNoteRequested)
+            NotificationCenter.default.publisher(
+                for: .newNoteRequested
+            )
         ) { _ in
             createNewNote()
         }
         .onReceive(
-            NotificationCenter.default.publisher(for: .openNoteRequested)
+            NotificationCenter.default.publisher(
+                for: .openNoteRequested
+            )
         ) { _ in
             searchFocused = true
         }
         .onReceive(
-            NotificationCenter.default.publisher(for: .saveNoteRequested)
+            NotificationCenter.default.publisher(
+                for: .saveNoteRequested
+            )
         ) { _ in
             saveImmediately()
         }
         .onReceive(
-            NotificationCenter.default.publisher(for: .togglePaletteRequested)
+            NotificationCenter.default.publisher(
+                for: .deleteNoteRequested
+            )
+        ) { _ in
+            deleteCurrentNote()
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .togglePaletteRequested
+            )
         ) { _ in
             togglePalette()
         }
@@ -172,7 +246,7 @@ struct ContentView: View {
                 saveError = nil
             }
         } message: {
-            Text(saveError ?? "Unbekannter Fehler")
+            Text(saveError ?? "Ein unbekannter Fehler ist aufgetreten.")
         }
         .onDisappear {
             autosaveTask?.cancel()
@@ -182,14 +256,11 @@ struct ContentView: View {
     // MARK: - Sidebar
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                Image(systemName: "square.and.pencil")
-                    .foregroundStyle(NoteTheme.accent)
-
-                Text("NOTIZEN")
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(1.3)
+        VStack(spacing: 0) {
+            HStack {
+                Text("My Notes")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(NoteTheme.primaryText)
 
                 Spacer()
 
@@ -197,26 +268,37 @@ struct ContentView: View {
                     createNewNote()
                 } label: {
                     Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(width: 28, height: 28)
+                        .background(NoteTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(NoteTheme.secondary)
                 .help("Neue Notiz")
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 14)
+            .padding(.horizontal, 14)
+            .padding(.top, 15)
+            .padding(.bottom, 13)
 
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(NoteTheme.secondary)
+                    .foregroundStyle(.secondary)
 
-                TextField("Notiz suchen", text: $searchQuery)
+                TextField("Notizen suchen", text: $searchQuery)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
+                    .onSubmit {
+                        if let firstNote = notes.first {
+                            openNote(at: firstNote)
+                        }
+                    }
             }
-            .padding(9)
-            .background(NoteTheme.background)
-            .clipShape(RoundedRectangle(cornerRadius: 7))
             .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(NoteTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 10)
+            .padding(.bottom, 12)
 
             ScrollView {
                 LazyVStack(spacing: 3) {
@@ -227,40 +309,51 @@ struct ContentView: View {
                 .padding(.horizontal, 7)
             }
 
-            Spacer(minLength: 0)
+            Divider()
+                .overlay(Color.white.opacity(0.04))
 
-            Text("\(notes.count) Notizen")
-                .font(.system(size: 10))
-                .foregroundStyle(NoteTheme.secondary)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 12)
+            HStack {
+                Text("\(notes.count) Notizen")
+                Spacer()
+                Text("⌘ K")
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 11)
         }
-        .frame(width: 205)
+        .frame(width: 220)
         .background(NoteTheme.sidebar)
     }
 
     private func noteRow(_ url: URL) -> some View {
-        let isSelected = currentFileURL?.standardizedFileURL
+        let selected = currentFileURL?.standardizedFileURL
             == url.standardizedFileURL
+
+        let type = NoteFileType(
+            rawValue: url.pathExtension.lowercased()
+        ) ?? .txt
 
         return Button {
             openNote(at: url)
         } label: {
             HStack(spacing: 9) {
-                Image(systemName: iconFor(url))
+                Image(systemName: type.symbol)
                     .font(.system(size: 12))
                     .foregroundStyle(
-                        isSelected ? NoteTheme.accent : NoteTheme.secondary
+                        selected ? NoteTheme.accent : .secondary
                     )
+                    .frame(width: 17)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(url.deletingPathExtension().lastPathComponent)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 12))
                         .lineLimit(1)
+                        .foregroundStyle(NoteTheme.primaryText)
 
-                    Text(url.pathExtension.uppercased())
-                        .font(.system(size: 9))
-                        .foregroundStyle(NoteTheme.secondary)
+                    Text(type.label)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
                 }
 
                 Spacer(minLength: 0)
@@ -269,24 +362,27 @@ struct ContentView: View {
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                isSelected ? NoteTheme.selected : Color.clear
+                selected ? NoteTheme.selection : Color.clear
             )
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: 7))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
+        .contextMenu {
+            Button {
+                openNote(at: url)
+            } label: {
+                Label("Öffnen", systemImage: "doc.text")
+            }
 
-    private func iconFor(_ url: URL) -> String {
-        switch url.pathExtension.lowercased() {
-        case "py", "java", "js":
-            return "chevron.left.forwardslash.chevron.right"
-        case "html", "css", "json":
-            return "curlybraces"
-        case "md":
-            return "text.alignleft"
-        default:
-            return "doc.text"
+            Button(role: .destructive) {
+                moveNoteToTrash(at: url)
+            } label: {
+                Label(
+                    "In den Papierkorb verschieben",
+                    systemImage: "trash"
+                )
+            }
         }
     }
 
@@ -294,46 +390,52 @@ struct ContentView: View {
 
     private var editor: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 TextField("Titel der Notiz", text: $title)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(NoteTheme.text)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(NoteTheme.primaryText)
 
                 Spacer()
 
                 Menu {
-                    Section("Standardschriftarten") {
-                        ForEach(standardFonts, id: \.self) { font in
-                            fontOption(font)
-                        }
-                    }
-
-                    Section("Monospace und Code") {
-                        ForEach(codeFonts, id: \.self) { font in
-                            fontOption(font)
+                    Section("Schriftart") {
+                        ForEach(availableFonts, id: \.self) { font in
+                            Button {
+                                fontName = font
+                            } label: {
+                                if fontName == font {
+                                    Label(font, systemImage: "checkmark")
+                                } else {
+                                    Text(font)
+                                }
+                            }
                         }
                     }
                 } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "textformat")
-                        Text(fontName)
-                            .lineLimit(1)
-                    }
-                    .font(.system(size: 11))
-                    .foregroundStyle(NoteTheme.secondary)
+                    Image(systemName: "textformat")
+                        .font(.system(size: 13))
+                        .frame(width: 30, height: 30)
+                        .background(NoteTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
                 }
                 .menuStyle(.borderlessButton)
+                .help("Schriftart ändern")
 
                 Button {
                     isFontSizePopoverPresented.toggle()
                 } label: {
-                    Image(systemName: "textformat.size")
-                        .foregroundStyle(NoteTheme.secondary)
+                    Text("\(Int(fontSize))")
+                        .font(.system(size: 12))
+                        .frame(width: 34, height: 30)
+                        .background(NoteTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
                 }
                 .buttonStyle(.plain)
-                .help("Schriftgröße ändern")
-                .popover(isPresented: $isFontSizePopoverPresented) {
+                .popover(
+                    isPresented: $isFontSizePopoverPresented,
+                    arrowEdge: .bottom
+                ) {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Schriftgröße")
                             .font(.system(size: 13, weight: .semibold))
@@ -344,108 +446,115 @@ struct ContentView: View {
                             step: 1
                         )
 
-                        HStack {
-                            Text("10 pt")
-                                .foregroundStyle(NoteTheme.secondary)
-
-                            Spacer()
-
-                            Text("\(Int(fontSize)) pt")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(NoteTheme.accent)
-
-                            Spacer()
-
-                            Text("32 pt")
-                                .foregroundStyle(NoteTheme.secondary)
-                        }
-                        .font(.system(size: 10))
+                        Text("\(Int(fontSize)) pt")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
                     }
                     .padding(16)
-                    .frame(width: 240)
+                    .frame(width: 220)
                 }
+                .help("Schriftgröße ändern")
+
+                Menu {
+                    ForEach(NoteFileType.allCases) { type in
+                        Button {
+                            changeFileType(to: type)
+                        } label: {
+                            if fileType == type {
+                                Label(
+                                    type.label,
+                                    systemImage: "checkmark"
+                                )
+                            } else {
+                                Text(type.label)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: fileType.symbol)
+                        Text(fileType.rawValue.uppercased())
+                    }
+                    .font(.system(size: 10, weight: .medium))
+                    .padding(.horizontal, 9)
+                    .frame(height: 30)
+                    .background(NoteTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                }
+                .menuStyle(.borderlessButton)
+                .help("Dateityp ändern")
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 22)
-            .padding(.bottom, 16)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 13)
+
+            Divider()
+                .overlay(Color.white.opacity(0.04))
 
             TextEditor(text: $noteText)
-                .font(.custom(fontName, size: fontSize))
-                .foregroundStyle(NoteTheme.text)
+                .font(
+                    .custom(
+                        fontName,
+                        size: fontSize
+                    )
+                )
                 .scrollContentBackground(.hidden)
-                .padding(.horizontal, 17)
-                .padding(.bottom, 8)
-                .background(NoteTheme.editor)
+                .foregroundStyle(NoteTheme.primaryText)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            HStack(spacing: 12) {
-                Text("\(noteText.count) Zeichen")
-                    .foregroundStyle(NoteTheme.secondary)
+            Divider()
+                .overlay(Color.white.opacity(0.04))
 
-                Text("·")
-                    .foregroundStyle(NoteTheme.secondary)
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(isDirty ? NoteTheme.accent : Color.green.opacity(0.7))
+                    .frame(width: 6, height: 6)
 
                 Text(saveStatus)
-                    .foregroundStyle(
-                        isDirty ? NoteTheme.accent : NoteTheme.secondary
-                    )
-                    .lineLimit(1)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
 
                 Spacer()
 
                 Button {
-                    saveImmediately()
-                } label: {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(NoteTheme.text)
-                        .padding(7)
-                        .background(NoteTheme.selected)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-                .help("Speichern (⌘S)")
-
-                Button {
                     togglePalette()
                 } label: {
-                    Image(systemName: "command")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(NoteTheme.text)
-                        .padding(7)
-                        .background(NoteTheme.selected)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    HStack(spacing: 5) {
+                        Image(systemName: "command")
+                        Text("Aktionen")
+                    }
+                    .font(.system(size: 11))
                 }
                 .buttonStyle(.plain)
-                .help("Aktionen (⌘K)")
-            }
-            .font(.system(size: 10))
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
-            .background(NoteTheme.background)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(NoteTheme.editor)
-    }
+                .help("Aktionsliste öffnen (⌘ K)")
 
-    private func fontOption(_ font: String) -> some View {
-        Button {
-            fontName = font
-        } label: {
-            HStack {
-                Text(font)
-
-                if fontName == font {
-                    Spacer()
-                    Image(systemName: "checkmark")
+                Button {
+                    saveImmediately()
+                } label: {
+                    Text("Speichern")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(NoteTheme.primaryText)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(NoteTheme.selection)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
                 }
+                .buttonStyle(.plain)
+                .help("Notiz speichern (⌘ S)")
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 11)
         }
+        .background(NoteTheme.background)
     }
 
     // MARK: - Autosave
 
-    private func markChanged() {
-        guard !isLoadingNote else { return }
+    private func markAsChanged() {
+        guard !isLoadingNote else {
+            return
+        }
 
         isDirty = true
         saveStatus = "Ungespeicherte Änderungen"
@@ -457,107 +566,103 @@ struct ContentView: View {
 
         autosaveTask = Task { @MainActor in
             do {
-                try await Task.sleep(nanoseconds: 1_000_000_000)
+                try await Task.sleep(for: .seconds(1))
             } catch {
                 return
             }
 
-            guard !Task.isCancelled else { return }
-
-            if !title.isEmpty || !noteText.isEmpty {
-                saveImmediately()
+            guard !Task.isCancelled else {
+                return
             }
+
+            saveImmediately()
         }
     }
 
-    // MARK: - Save
+    // MARK: - Saving
 
     private func saveImmediately() {
         autosaveTask?.cancel()
 
-        let safeTitle = title.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
-
-        guard !safeTitle.isEmpty || !noteText.isEmpty else {
-            saveStatus = "Bereit"
-            isDirty = false
-            return
-        }
-
         do {
-            let destination: URL
+            let trimmedTitle = title.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
 
-            if let currentURL = currentFileURL {
-                let oldTitle = currentURL
-                    .deletingPathExtension()
-                    .lastPathComponent
+            let finalTitle = trimmedTitle.isEmpty
+                ? "Unbenannte Notiz"
+                : trimmedTitle
 
-                if !safeTitle.isEmpty && safeTitle != oldTitle {
-                    let newURL = currentURL
-                        .deletingLastPathComponent()
-                        .appendingPathComponent(safeTitle)
-                        .appendingPathExtension(currentURL.pathExtension)
+            var destinationURL: URL
 
-                    if newURL.standardizedFileURL
-                        != currentURL.standardizedFileURL {
-                        guard !FileManager.default.fileExists(
-                            atPath: newURL.path
-                        ) else {
-                            saveError = "Eine Notiz mit diesem Titel existiert bereits."
-                            return
-                        }
+            if let existingURL = currentFileURL {
+                let expectedURL = existingURL
+                    .deletingLastPathComponent()
+                    .appendingPathComponent(finalTitle)
+                    .appendingPathExtension(fileType.rawValue)
+
+                if existingURL.standardizedFileURL
+                    != expectedURL.standardizedFileURL {
+                    destinationURL = try storage.renameNote(
+                        at: existingURL,
+                        to: finalTitle
+                    )
+
+                    if destinationURL.pathExtension.lowercased()
+                        != fileType.rawValue {
+                        let correctedURL = destinationURL
+                            .deletingPathExtension()
+                            .appendingPathExtension(fileType.rawValue)
 
                         try FileManager.default.moveItem(
-                            at: currentURL,
-                            to: newURL
+                            at: destinationURL,
+                            to: correctedURL
                         )
-                    }
 
-                    destination = newURL
+                        destinationURL = correctedURL
+                    }
                 } else {
-                    destination = currentURL
+                    destinationURL = existingURL
                 }
             } else {
-                destination = try storage.createNote(
-                    title: safeTitle.isEmpty
-                        ? "Unbenannte Notiz"
-                        : safeTitle,
+                destinationURL = try storage.createNote(
+                    title: finalTitle,
                     fileType: fileType.rawValue
                 )
             }
 
-            try storage.save(text: noteText, to: destination)
+            try storage.save(
+                text: noteText,
+                to: destinationURL
+            )
 
-            currentFileURL = destination
-            title = destination.deletingPathExtension().lastPathComponent
+            isLoadingNote = true
+            currentFileURL = destinationURL
+            title = finalTitle
             isDirty = false
             saveStatus = "Gespeichert"
+
             refreshNotes()
+
+            Task { @MainActor in
+                await Task.yield()
+                isLoadingNote = false
+            }
         } catch {
             saveStatus = "Speichern fehlgeschlagen"
             saveError = error.localizedDescription
         }
     }
 
-    // MARK: - Internal notes
-
-    private func refreshNotes() {
-        notes = storage.searchNotes(query: searchQuery)
-    }
+    // MARK: - Opening notes
 
     private func openNote(at url: URL) {
         if currentFileURL?.standardizedFileURL == url.standardizedFileURL {
             return
         }
 
-        if isDirty || ((!title.isEmpty || !noteText.isEmpty)
-            && currentFileURL == nil) {
+        if isDirty || currentFileURL == nil && !noteText.isEmpty {
             saveImmediately()
-
-            if isDirty {
-                return
-            }
         }
 
         autosaveTask?.cancel()
@@ -566,23 +671,24 @@ struct ContentView: View {
             let loadedText = try storage.load(from: url)
 
             isLoadingNote = true
+
             currentFileURL = url
             title = url.deletingPathExtension().lastPathComponent
             noteText = loadedText
+            fileType = NoteFileType(
+                rawValue: url.pathExtension.lowercased()
+            ) ?? .txt
 
-            if let matchingType = NoteFileType.allCases.first(
-                where: {
-                    $0.rawValue == url.pathExtension.lowercased()
-                }
-            ) {
-                fileType = matchingType
+            if !availableFonts.contains(fontName) {
+                fontName = availableFonts.first ?? "Helvetica Neue"
             }
 
             isDirty = false
             saveStatus = "Gespeichert"
             searchFocused = false
 
-            DispatchQueue.main.async {
+            Task { @MainActor in
+                await Task.yield()
                 isLoadingNote = false
             }
         } catch {
@@ -591,49 +697,139 @@ struct ContentView: View {
     }
 
     private func createNewNote() {
-        if isDirty || ((!title.isEmpty || !noteText.isEmpty)
-            && currentFileURL == nil) {
+        if isDirty {
             saveImmediately()
-
-            if isDirty {
-                return
-            }
         }
 
         autosaveTask?.cancel()
-        isLoadingNote = true
 
+        isLoadingNote = true
+        currentFileURL = nil
         title = ""
         noteText = ""
         fileType = .txt
-        currentFileURL = nil
         isDirty = false
         saveStatus = "Neue Notiz"
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
+            await Task.yield()
             isLoadingNote = false
         }
+    }
+
+    // MARK: - Trash
+
+    private func deleteCurrentNote() {
+        guard let url = currentFileURL else {
+            saveError = "Es ist keine gespeicherte Notiz geöffnet."
+            return
+        }
+
+        moveNoteToTrash(at: url)
+    }
+
+    private func moveNoteToTrash(at url: URL) {
+        autosaveTask?.cancel()
+
+        let isCurrentNote = currentFileURL?.standardizedFileURL
+            == url.standardizedFileURL
+
+        do {
+            try storage.trashNote(at: url)
+
+            if isCurrentNote {
+                isLoadingNote = true
+
+                currentFileURL = nil
+                title = ""
+                noteText = ""
+                fileType = .txt
+                isDirty = false
+                saveStatus = "Notiz im Papierkorb"
+
+                Task { @MainActor in
+                    await Task.yield()
+                    isLoadingNote = false
+                }
+            }
+
+            refreshNotes()
+        } catch {
+            saveError = error.localizedDescription
+        }
+    }
+
+    // MARK: - File type
+
+    private func changeFileType(to newType: NoteFileType) {
+        guard newType != fileType else {
+            return
+        }
+
+        autosaveTask?.cancel()
+
+        do {
+            if let existingURL = currentFileURL {
+                let newURL = existingURL
+                    .deletingPathExtension()
+                    .appendingPathExtension(newType.rawValue)
+
+                if FileManager.default.fileExists(atPath: newURL.path) {
+                    saveError = "Eine Datei mit diesem Namen existiert bereits."
+                    return
+                }
+
+                try FileManager.default.moveItem(
+                    at: existingURL,
+                    to: newURL
+                )
+
+                currentFileURL = newURL
+            }
+
+            fileType = newType
+
+            if !availableFonts.contains(fontName) {
+                fontName = availableFonts.first ?? "Helvetica Neue"
+            }
+
+            if currentFileURL != nil {
+                saveImmediately()
+            } else {
+                isDirty = true
+                saveStatus = "Dateityp geändert"
+            }
+
+            refreshNotes()
+        } catch {
+            saveError = error.localizedDescription
+        }
+    }
+
+    // MARK: - Search
+
+    private func refreshNotes() {
+        notes = storage.searchNotes(query: searchQuery)
     }
 
     // MARK: - Command palette
 
     private func togglePalette() {
-        if palette.isVisible {
-            palette.close()
+        if CommandPaletteController.shared.isVisible {
+            CommandPaletteController.shared.close()
         } else {
-            palette.show(
-                relativeTo: NSApp.keyWindow ?? NSApp.mainWindow,
-                commands: paletteCommands
-            ) { command in
-                handlePaletteCommand(command)
-            }
+            CommandPaletteController.shared.show(
+                relativeTo: NSApp.keyWindow,
+                commands: paletteCommands,
+                onAction: handlePaletteCommand
+            )
         }
     }
 
-    private func handlePaletteCommand(_ command: String) {
-        palette.close()
+    private func handlePaletteCommand(_ commandID: String) {
+        CommandPaletteController.shared.close()
 
-        switch command {
+        switch commandID {
         case "new":
             createNewNote()
 
@@ -643,94 +839,18 @@ struct ContentView: View {
         case "save":
             saveImmediately()
 
+        case "delete":
+            deleteCurrentNote()
+
         case "font":
-            isFontSizePopoverPresented = true
+            isFontSizePopoverPresented = false
+            saveStatus = "Schriftart über das Menü ändern"
 
         case "filetype":
-            showFileTypePalette()
+            saveStatus = "Dateityp über das Menü ändern"
 
         default:
             break
-        }
-    }
-
-    private func showFileTypePalette() {
-        let typeCommands = NoteFileType.allCases.map { type in
-            PaletteCommand(
-                id: "choose_type_\(type.rawValue)",
-                title: "\(type.label) (.\(type.rawValue))",
-                symbol: "doc.text",
-                shortcut: ""
-            )
-        }
-
-        palette.show(
-            relativeTo: NSApp.keyWindow ?? NSApp.mainWindow,
-            commands: typeCommands
-        ) { command in
-            guard command.hasPrefix("choose_type_") else {
-                return
-            }
-
-            let rawType = String(
-                command.dropFirst("choose_type_".count)
-            )
-
-            guard let type = NoteFileType(rawValue: rawType) else {
-                return
-            }
-
-            changeFileType(to: type)
-        }
-    }
-
-    private func changeFileType(to type: NoteFileType) {
-        guard type != fileType else {
-            palette.close()
-            return
-        }
-
-        autosaveTask?.cancel()
-
-        do {
-            if let currentURL = currentFileURL {
-                let newURL = currentURL
-                    .deletingPathExtension()
-                    .appendingPathExtension(type.rawValue)
-
-                if newURL.standardizedFileURL != currentURL.standardizedFileURL {
-                    guard !FileManager.default.fileExists(
-                        atPath: newURL.path
-                    ) else {
-                        palette.close()
-                        saveError = "Eine Datei mit diesem Dateityp existiert bereits."
-                        return
-                    }
-
-                    try FileManager.default.moveItem(
-                        at: currentURL,
-                        to: newURL
-                    )
-                }
-
-                currentFileURL = newURL
-                fileType = type
-
-                try storage.save(text: noteText, to: newURL)
-
-                isDirty = false
-                saveStatus = "Gespeichert"
-                refreshNotes()
-            } else {
-                fileType = type
-                markChanged()
-            }
-
-            palette.close()
-        } catch {
-            palette.close()
-            saveError = error.localizedDescription
-            saveStatus = "Änderung fehlgeschlagen"
         }
     }
 }

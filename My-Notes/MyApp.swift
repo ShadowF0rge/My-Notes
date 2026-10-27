@@ -35,6 +35,14 @@ struct MyNotesApp: App {
                 }
                 .keyboardShortcut("s", modifiers: .command)
 
+                Button("In den Papierkorb verschieben") {
+                    NotificationCenter.default.post(
+                        name: .deleteNoteRequested,
+                        object: nil
+                    )
+                }
+                .keyboardShortcut("d", modifiers: .command)
+
                 Button("Aktionen") {
                     NotificationCenter.default.post(
                         name: .togglePaletteRequested,
@@ -56,6 +64,9 @@ extension Notification.Name {
 
     static let saveNoteRequested =
         Notification.Name("saveNoteRequested")
+
+    static let deleteNoteRequested =
+        Notification.Name("deleteNoteRequested")
 
     static let togglePaletteRequested =
         Notification.Name("togglePaletteRequested")
