@@ -250,12 +250,18 @@ struct CommandPaletteView: View {
                     .padding(.horizontal, 9)
                     .padding(.vertical, 8)
                 }
+                .onChange(of: selectedIndex) {
+                    withAnimation(.easeInOut(duration: 0.12)) {
+                        proxy.scrollTo(selectedIndex, anchor: .center)
+                    }
+                }
                 .onChange(of: query) {
                     selectedIndex = 0
                     proxy.scrollTo(0, anchor: .top)
                 }
                 .onChange(of: filteredCommands.count) {
                     selectedIndex = 0
+                    proxy.scrollTo(0, anchor: .top)
                 }
             }
 

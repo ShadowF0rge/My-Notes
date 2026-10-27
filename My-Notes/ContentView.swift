@@ -2,87 +2,43 @@
 import SwiftUI
 import AppKit
 
-private enum NoteFileType: String, CaseIterable, Identifiable {
-    case txt
-    case py
-    case java
-    case js
-    case html
-    case css
-    case json
-    case md
+enum NoteFileType: String, CaseIterable, Identifiable {
+    case txt, py, java, js, html, css, json, md
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .txt: return "Text"
-        case .py: return "Python"
-        case .java: return "Java"
-        case .js: return "JavaScript"
-        case .html: return "HTML"
-        case .css: return "CSS"
-        case .json: return "JSON"
-        case .md: return "Markdown"
+        case .txt: "Text"
+        case .py: "Python"
+        case .java: "Java"
+        case .js: "JavaScript"
+        case .html: "HTML"
+        case .css: "CSS"
+        case .json: "JSON"
+        case .md: "Markdown"
         }
-    }
-
-    var isCode: Bool {
-        self != .txt && self != .md
     }
 
     var symbol: String {
         switch self {
-        case .txt: return "doc.text"
-        case .py: return "chevron.left.forwardslash.chevron.right"
-        case .java: return "cup.and.saucer"
-        case .js: return "curlybraces"
-        case .html: return "chevron.left.forwardslash.chevron.right"
-        case .css: return "paintbrush"
-        case .json: return "curlybraces"
-        case .md: return "text.alignleft"
+        case .txt: "doc.text"
+        case .py, .html: "chevron.left.forwardslash.chevron.right"
+        case .java: "cup.and.saucer"
+        case .js, .json: "curlybraces"
+        case .css: "paintbrush"
+        case .md: "text.alignleft"
         }
     }
 }
 
-private enum NoteTheme {
-    static let background = Color(
-        red: 0.075,
-        green: 0.07,
-        blue: 0.08
-    )
-
-    static let sidebar = Color(
-        red: 0.09,
-        green: 0.085,
-        blue: 0.095
-    )
-
-    static let surface = Color(
-        red: 0.12,
-        green: 0.11,
-        blue: 0.12
-    )
-
-    static let accent = Color(
-        red: 0.78,
-        green: 0.38,
-        blue: 0.42
-    )
-
-    static let selection = Color(
-        red: 0.22,
-        green: 0.105,
-        blue: 0.12
-    )
-
-    static let primaryText = Color(
-        red: 0.91,
-        green: 0.89,
-        blue: 0.91
-    )
-
-    static let secondaryText = Color.secondary
+enum NoteTheme {
+    static let background = Color(red: 0.075, green: 0.07, blue: 0.08)
+    static let sidebar = Color(red: 0.09, green: 0.085, blue: 0.095)
+    static let surface = Color(red: 0.12, green: 0.11, blue: 0.12)
+    static let accent = Color(red: 0.78, green: 0.38, blue: 0.42)
+    static let selection = Color(red: 0.22, green: 0.105, blue: 0.12)
+    static let primaryText = Color(red: 0.91, green: 0.89, blue: 0.91)
 }
 
 struct PaletteCommand: Identifiable {
@@ -93,54 +49,90 @@ struct PaletteCommand: Identifiable {
 }
 
 struct ContentView: View {
-    private let storage = NoteStorage.shared
+    let storage = NoteStorage.shared
 
-    @State private var title = ""
-    @State private var noteText = ""
-    @State private var fileType: NoteFileType = .txt
-    @State private var currentFileURL: URL?
+    @State var title = ""
+    @State var noteText = ""
+    @State var fileType: NoteFileType = .txt
+    @State var currentFileURL: URL?
 
-    @State private var saveStatus = "Bereit"
-    @State private var saveError: String?
+    @State var saveStatus = "Bereit"
+    @State var saveError: String?
 
-    @State private var fontSize: Double = 14
-    @State private var fontName = "Helvetica Neue"
-    @State private var isFontSizePopoverPresented = false
+    @State var fontSize: Double = 14
+    @State var fontName = "Helvetica Neue"
+    @State var isFontSizePopoverPresented = false
 
-    @State private var searchQuery = ""
-    @State private var notes: [URL] = []
-    @State private var autosaveTask: Task<Void, Never>?
+    @State var searchQuery = ""
+    @State var notes: [URL] = []
+    @State var folders: [URL] = []
+    @State var autosaveTask: Task<Void, Never>?
 
-    @State private var isDirty = false
-    @State private var isLoadingNote = false
-    @State private var searchFocused = false
+    @State var isDirty = false
+    @State var isLoadingNote = false
 
-    private let standardFonts = [
-        "Helvetica Neue",
-        "Arial",
-        "Avenir Next",
-        "Georgia",
-        "Times New Roman"
+    // @FocusState ermöglicht das tatsächliche Fokussieren des Suchfeldes.
+    @FocusState var searchFocused: Bool
+
+    @State var tagText = ""
+    @State var newTagText = ""
+    @State var isTagEditorPresented = false
+
+    @State var showingTrash = false
+    @State var trashedNotes: [URL] = []
+    @State var showingPermanentDeleteConfirmation = false
+    @State var noteToDeletePermanently: URL?
+    @State var showingRestoreError: String?
+
+    @State var isSidebarVisible = true
+    @State var selectedFolderPath: String?
+    @State var showingOnlyUnfiled = false
+
+    // Die aufgeklappten Ordner werden als Pfade gespeichert.
+    @State var expandedFolderPaths: Set<String> = []
+
+    private let expandedFoldersDefaultsKey =
+        "MyNotes.expandedFolderPaths"
+
+    let standardFonts = [
+        "Helvetica Neue", "Arial", "Avenir Next",
+        "Georgia", "Times New Roman"
     ]
 
-    private let codeFonts = [
-        "SF Mono",
-        "Menlo",
-        "Monaco",
-        "Courier New"
+    let codeFonts = [
+        "SF Mono", "Menlo", "Monaco", "Courier New"
     ]
 
-    private var availableFonts: [String] {
-        fileType.isCode ? codeFonts : standardFonts
+    var availableFonts: [String] {
+        fileType == .txt || fileType == .md
+            ? standardFonts
+            : codeFonts
     }
 
-    private var paletteCommands: [PaletteCommand] {
+    var displayedTags: [String] {
+        tagText
+            .split(separator: ",")
+            .map {
+                String($0).trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
+            }
+            .filter { !$0.isEmpty }
+    }
+
+    var paletteCommands: [PaletteCommand] {
         [
             PaletteCommand(
                 id: "new",
                 title: "Neue Notiz",
                 symbol: "plus",
                 shortcut: "⌘ N"
+            ),
+            PaletteCommand(
+                id: "newFolder",
+                title: "Neuen Ordner erstellen",
+                symbol: "folder.badge.plus",
+                shortcut: ""
             ),
             PaletteCommand(
                 id: "search",
@@ -158,7 +150,37 @@ struct ContentView: View {
                 id: "delete",
                 title: "In den Papierkorb verschieben",
                 symbol: "trash",
-                shortcut: "⌘ D"
+                shortcut: ""
+            ),
+            PaletteCommand(
+                id: "pin",
+                title: "Notiz anheften / lösen",
+                symbol: "pin",
+                shortcut: ""
+            ),
+            PaletteCommand(
+                id: "exportMarkdown",
+                title: "Als Markdown exportieren",
+                symbol: "doc.text",
+                shortcut: ""
+            ),
+            PaletteCommand(
+                id: "exportText",
+                title: "Als Text exportieren",
+                symbol: "doc.plaintext",
+                shortcut: ""
+            ),
+            PaletteCommand(
+                id: "copy",
+                title: "Text kopieren",
+                symbol: "doc.on.doc",
+                shortcut: ""
+            ),
+            PaletteCommand(
+                id: "trash",
+                title: "Papierkorb öffnen",
+                symbol: "trash",
+                shortcut: ""
             ),
             PaletteCommand(
                 id: "font",
@@ -175,21 +197,150 @@ struct ContentView: View {
         ]
     }
 
+    var wordCount: Int {
+        NoteUtilities.wordCount(in: noteText)
+    }
+
+    var characterCount: Int {
+        NoteUtilities.characterCount(in: noteText)
+    }
+
+    var currentNoteIsPinned: Bool {
+        guard let currentFileURL else { return false }
+        return storage.isPinned(currentFileURL)
+    }
+
+    var visibleNotes: [URL] {
+        if !searchQuery.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).isEmpty {
+            return notes
+        }
+
+        if showingOnlyUnfiled {
+            return storage.listNotes(in: nil)
+        }
+
+        if let selectedFolderPath {
+            return storage.listNotes(
+                in: URL(fileURLWithPath: selectedFolderPath)
+            )
+        }
+
+        return notes
+    }
+
+    // MARK: - Visible Folder Tree
+
+    /// Liefert nur Ordner, deren Elternordner aufgeklappt sind.
+    /// Die Reihenfolge bleibt hierarchisch und wird für die Einrückung
+    /// der Sidebar verwendet.
+    private var visibleFolders: [URL] {
+        var result: [URL] = []
+
+        func appendChildren(of parent: URL) {
+            let parentPath = parent.standardizedFileURL.path
+
+            let children = folders
+                .filter {
+                    $0.deletingLastPathComponent()
+                        .standardizedFileURL.path == parentPath
+                }
+                .sorted {
+                    $0.lastPathComponent.localizedStandardCompare(
+                        $1.lastPathComponent
+                    ) == .orderedAscending
+                }
+
+            for folder in children {
+                result.append(folder)
+
+                if expandedFolderPaths.contains(
+                    folder.standardizedFileURL.path
+                ) {
+                    appendChildren(of: folder)
+                }
+            }
+        }
+
+        appendChildren(of: storage.notesDirectory)
+
+        return result
+    }
+
+    private func folderDepth(_ folder: URL) -> Int {
+        let rootPath = storage.notesDirectory.standardizedFileURL.path
+        let folderPath = folder.standardizedFileURL.path
+
+        let relativePath = String(
+            folderPath.dropFirst(rootPath.count)
+        )
+
+        return max(
+            0,
+            relativePath.split(separator: "/").count - 1
+        )
+    }
+
+    private func folderHasChildren(_ folder: URL) -> Bool {
+        folders.contains {
+            $0.deletingLastPathComponent()
+                .standardizedFileURL.path
+                == folder.standardizedFileURL.path
+        }
+    }
+
+    private func toggleFolderExpansion(_ folder: URL) {
+        let path = folder.standardizedFileURL.path
+
+        if expandedFolderPaths.contains(path) {
+            expandedFolderPaths.remove(path)
+        } else {
+            expandedFolderPaths.insert(path)
+        }
+
+        saveExpandedFolders()
+    }
+
+    private func loadExpandedFolders() {
+        let savedPaths = UserDefaults.standard.stringArray(
+            forKey: expandedFoldersDefaultsKey
+        ) ?? []
+
+        expandedFolderPaths = Set(savedPaths)
+    }
+
+    func saveExpandedFolders() {
+        UserDefaults.standard.set(
+            Array(expandedFolderPaths),
+            forKey: expandedFoldersDefaultsKey
+        )
+    }
+
+    // MARK: - Body
+
     var body: some View {
         HStack(spacing: 0) {
-            sidebar
-
-            Rectangle()
-                .fill(Color.white.opacity(0.04))
-                .frame(width: 1)
+            if isSidebarVisible {
+                sidebar
+                    .transition(
+                        .move(edge: .leading).combined(with: .opacity)
+                    )
+            }
 
             editor
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 680, minHeight: 440)
+        .frame(minWidth: 600, minHeight: 420)
         .background(NoteTheme.background)
         .preferredColorScheme(.dark)
+        .animation(
+            .easeInOut(duration: 0.18),
+            value: isSidebarVisible
+        )
         .onAppear {
-            refreshNotes()
+            loadExpandedFolders()
+            refreshAll()
         }
         .onChange(of: noteText) {
             markAsChanged()
@@ -199,6 +350,9 @@ struct ContentView: View {
         }
         .onChange(of: searchQuery) {
             refreshNotes()
+        }
+        .onChange(of: tagText) {
+            saveTags()
         }
         .onReceive(
             NotificationCenter.default.publisher(
@@ -212,7 +366,12 @@ struct ContentView: View {
                 for: .openNoteRequested
             )
         ) { _ in
-            searchFocused = true
+            isSidebarVisible = true
+
+            // ⌘O öffnet die Sidebar und fokussiert die Suche.
+            DispatchQueue.main.async {
+                searchFocused = true
+            }
         }
         .onReceive(
             NotificationCenter.default.publisher(
@@ -235,6 +394,22 @@ struct ContentView: View {
         ) { _ in
             togglePalette()
         }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .deleteSelectedItemRequested
+            )
+        ) { _ in
+            if let selectedFolderPath {
+                deleteFolder(
+                    URL(fileURLWithPath: selectedFolderPath)
+                )
+            } else {
+                deleteCurrentNote()
+            }
+        }
+        .sheet(isPresented: $showingTrash) {
+            trashSheet
+        }
         .alert(
             "Fehler",
             isPresented: Binding(
@@ -246,7 +421,37 @@ struct ContentView: View {
                 saveError = nil
             }
         } message: {
-            Text(saveError ?? "Ein unbekannter Fehler ist aufgetreten.")
+            Text(
+                saveError
+                    ?? "Ein unbekannter Fehler ist aufgetreten."
+            )
+        }
+        .alert(
+            "Notiz endgültig löschen?",
+            isPresented: $showingPermanentDeleteConfirmation
+        ) {
+            Button("Abbrechen", role: .cancel) {
+                noteToDeletePermanently = nil
+            }
+
+            Button("Endgültig löschen", role: .destructive) {
+                permanentlyDeleteSelectedNote()
+            }
+        } message: {
+            Text("Diese Aktion kann nicht rückgängig gemacht werden.")
+        }
+        .alert(
+            "Aktion fehlgeschlagen",
+            isPresented: Binding(
+                get: { showingRestoreError != nil },
+                set: { if !$0 { showingRestoreError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                showingRestoreError = nil
+            }
+        } message: {
+            Text(showingRestoreError ?? "")
         }
         .onDisappear {
             autosaveTask?.cancel()
@@ -264,19 +469,25 @@ struct ContentView: View {
 
                 Spacer()
 
-                Button {
-                    createNewNote()
-                } label: {
+                Button(action: createNewFolder) {
+                    Image(systemName: "folder.badge.plus")
+                        .frame(width: 27, height: 27)
+                }
+                .buttonStyle(.plain)
+                .help("Neuen Ordner erstellen")
+
+                Button(action: createNewNote) {
                     Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .medium))
-                        .frame(width: 28, height: 28)
+                        .frame(width: 27, height: 27)
                         .background(NoteTheme.surface)
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .clipShape(
+                            RoundedRectangle(cornerRadius: 7)
+                        )
                 }
                 .buttonStyle(.plain)
                 .help("Neue Notiz")
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 13)
             .padding(.top, 15)
             .padding(.bottom, 13)
 
@@ -287,34 +498,96 @@ struct ContentView: View {
                 TextField("Notizen suchen", text: $searchQuery)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
+                    .focused($searchFocused)
                     .onSubmit {
-                        if let firstNote = notes.first {
-                            openNote(at: firstNote)
+                        if let first = visibleNotes.first {
+                            openNote(at: first)
                         }
                     }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 9)
+            .padding(9)
             .background(NoteTheme.surface)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal, 10)
             .padding(.bottom, 12)
 
             ScrollView {
-                LazyVStack(spacing: 3) {
-                    ForEach(notes, id: \.path) { url in
-                        noteRow(url)
+                LazyVStack(alignment: .leading, spacing: 3) {
+                    sectionLabel("BIBLIOTHEK")
+
+                    navigationRow(
+                        title: "Alle Notizen",
+                        symbol: "tray.full",
+                        selected: selectedFolderPath == nil
+                            && !showingOnlyUnfiled
+                    ) {
+                        selectedFolderPath = nil
+                        showingOnlyUnfiled = false
+                    }
+                    .dropDestination(for: String.self) { items, _ in
+                        return moveDroppedNotes(items, to: nil)
+                    }
+
+                    navigationRow(
+                        title: "Ohne Ordner",
+                        symbol: "tray",
+                        selected: showingOnlyUnfiled
+                    ) {
+                        showingOnlyUnfiled = true
+                        selectedFolderPath = nil
+                    }
+                    .dropDestination(for: String.self) { items, _ in
+                        return moveDroppedNotes(items, to: nil)
+                    }
+
+                    sectionLabel("ORDNER")
+                        .padding(.top, 12)
+
+                    ForEach(visibleFolders, id: \.path) { folder in
+                        folderRow(folder)
+                    }
+
+                    sectionLabel(
+                        searchQuery.isEmpty
+                            ? "NOTIZEN"
+                            : "SUCHERGEBNISSE"
+                    )
+                    .padding(.top, 12)
+
+                    if visibleNotes.isEmpty {
+                        Text(
+                            searchQuery.isEmpty
+                                ? "Keine Notizen"
+                                : "Keine Ergebnisse"
+                        )
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                    } else {
+                        ForEach(visibleNotes, id: \.path) { url in
+                            noteRow(url)
+                        }
                     }
                 }
-                .padding(.horizontal, 7)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 8)
             }
-
-            Divider()
-                .overlay(Color.white.opacity(0.04))
 
             HStack {
                 Text("\(notes.count) Notizen")
+
                 Spacer()
+
+                Button {
+                    refreshTrash()
+                    showingTrash = true
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.plain)
+                .help("Papierkorb öffnen")
+
                 Text("⌘ K")
             }
             .font(.system(size: 10))
@@ -322,12 +595,163 @@ struct ContentView: View {
             .padding(.horizontal, 13)
             .padding(.vertical, 11)
         }
-        .frame(width: 220)
+        .frame(width: 235)
         .background(NoteTheme.sidebar)
     }
 
+    private func sectionLabel(_ value: String) -> some View {
+        Text(value)
+            .font(.system(size: 9, weight: .semibold))
+            .tracking(0.8)
+            .foregroundStyle(.tertiary)
+            .padding(.horizontal, 9)
+            .padding(.top, 5)
+            .padding(.bottom, 4)
+    }
+
+    private func navigationRow(
+        title: String,
+        symbol: String,
+        selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: symbol)
+                    .frame(width: 17)
+                    .foregroundStyle(
+                        selected ? NoteTheme.accent : .secondary
+                    )
+
+                Text(title)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(NoteTheme.primaryText)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 8)
+            .background(
+                selected ? NoteTheme.selection : .clear
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Hierarchical Folder Row
+
+    private func folderRow(_ folder: URL) -> some View {
+        let path = folder.standardizedFileURL.path
+        let selected = selectedFolderPath == path
+        let hasChildren = folderHasChildren(folder)
+        let isExpanded = expandedFolderPaths.contains(path)
+        let indentation = CGFloat(folderDepth(folder)) * 14
+
+        return HStack(spacing: 2) {
+            // Der Pfeil ändert ausschließlich den Aufklappzustand.
+            Button {
+                toggleFolderExpansion(folder)
+            } label: {
+                Image(
+                    systemName: hasChildren
+                        ? (isExpanded ? "chevron.down" : "chevron.right")
+                        : "chevron.right"
+                )
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(
+                    hasChildren ? Color.secondary : Color.clear
+                )
+                .frame(width: 18, height: 29)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!hasChildren)
+            .help(
+                hasChildren
+                    ? (isExpanded ? "Ordner zuklappen" : "Ordner aufklappen")
+                    : "Keine Unterordner"
+            )
+
+            // Der Ordnername wählt den Ordner aus.
+            Button {
+                selectedFolderPath = path
+                showingOnlyUnfiled = false
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 12))
+                        .foregroundStyle(
+                            selected ? NoteTheme.accent : .secondary
+                        )
+                        .frame(width: 15)
+
+                    Text(folder.lastPathComponent)
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(NoteTheme.primaryText)
+                .padding(.vertical, 7)
+                .padding(.trailing, 7)
+                .background(
+                    selected ? NoteTheme.selection : .clear
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.leading, indentation)
+        .background(
+            selected ? NoteTheme.selection : .clear
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .draggable(folder.path)
+        .dropDestination(for: String.self) { items, _ in
+            return moveDroppedNotes(items, to: folder)
+        }
+        .contextMenu {
+            Button("Ordner öffnen") {
+                selectedFolderPath = path
+                showingOnlyUnfiled = false
+            }
+
+            Button(
+                isExpanded
+                    ? "Ordner zuklappen"
+                    : "Ordner aufklappen"
+            ) {
+                toggleFolderExpansion(folder)
+            }
+            .disabled(!hasChildren)
+
+            Button("Neuen Unterordner erstellen") {
+                selectedFolderPath = path
+                showingOnlyUnfiled = false
+                createNewFolder()
+            }
+
+            Button("Umbenennen") {
+                renameFolder(folder)
+            }
+
+            Button(role: .destructive) {
+                deleteFolder(folder)
+            } label: {
+                Label("Ordner löschen", systemImage: "trash")
+            }
+        }
+    }
+
+    // MARK: - Note Row
+
     private func noteRow(_ url: URL) -> some View {
-        let selected = currentFileURL?.standardizedFileURL
+        let selected =
+            currentFileURL?.standardizedFileURL
             == url.standardizedFileURL
 
         let type = NoteFileType(
@@ -346,10 +770,20 @@ struct ContentView: View {
                     .frame(width: 17)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(url.deletingPathExtension().lastPathComponent)
+                    HStack(spacing: 4) {
+                        if storage.isPinned(url) {
+                            Image(systemName: "pin.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(NoteTheme.accent)
+                        }
+
+                        Text(
+                            url.deletingPathExtension().lastPathComponent
+                        )
                         .font(.system(size: 12))
                         .lineLimit(1)
                         .foregroundStyle(NoteTheme.primaryText)
+                    }
 
                     Text(type.label)
                         .font(.system(size: 10))
@@ -362,17 +796,45 @@ struct ContentView: View {
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                selected ? NoteTheme.selection : Color.clear
+                selected ? NoteTheme.selection : .clear
             )
             .clipShape(RoundedRectangle(cornerRadius: 7))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .draggable(url.path)
         .contextMenu {
             Button {
                 openNote(at: url)
             } label: {
                 Label("Öffnen", systemImage: "doc.text")
+            }
+
+            Button {
+                togglePin(url)
+            } label: {
+                Label(
+                    storage.isPinned(url)
+                        ? "Anheftung lösen"
+                        : "Anheften",
+                    systemImage: "pin"
+                )
+            }
+
+            Menu("Exportieren") {
+                Button("Als Markdown exportieren") {
+                    NoteUtilities.exportMarkdown(
+                        text: (try? storage.load(from: url)) ?? "",
+                        title: url.deletingPathExtension().lastPathComponent
+                    )
+                }
+
+                Button("Als Text exportieren") {
+                    NoteUtilities.exportText(
+                        text: (try? storage.load(from: url)) ?? "",
+                        title: url.deletingPathExtension().lastPathComponent
+                    )
+                }
             }
 
             Button(role: .destructive) {
@@ -391,12 +853,49 @@ struct ContentView: View {
     private var editor: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
+                Button {
+                    isSidebarVisible.toggle()
+                } label: {
+                    Image(systemName: "sidebar.left")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .background(NoteTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                }
+                .buttonStyle(.plain)
+                .help(
+                    isSidebarVisible
+                        ? "Sidebar ausblenden"
+                        : "Sidebar einblenden"
+                )
+
                 TextField("Titel der Notiz", text: $title)
                     .textFieldStyle(.plain)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(NoteTheme.primaryText)
 
                 Spacer()
+
+                Button(action: toggleCurrentPin) {
+                    Image(
+                        systemName: currentNoteIsPinned
+                            ? "pin.fill"
+                            : "pin"
+                    )
+                    .font(.system(size: 12))
+                    .foregroundStyle(
+                        currentNoteIsPinned
+                            ? NoteTheme.accent
+                            : .secondary
+                    )
+                    .frame(width: 30, height: 30)
+                    .background(NoteTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                }
+                .buttonStyle(.plain)
+                .disabled(currentFileURL == nil)
+                .help("Notiz anheften")
 
                 Menu {
                     Section("Schriftart") {
@@ -405,7 +904,10 @@ struct ContentView: View {
                                 fontName = font
                             } label: {
                                 if fontName == font {
-                                    Label(font, systemImage: "checkmark")
+                                    Label(
+                                        font,
+                                        systemImage: "checkmark"
+                                    )
                                 } else {
                                     Text(font)
                                 }
@@ -414,13 +916,11 @@ struct ContentView: View {
                     }
                 } label: {
                     Image(systemName: "textformat")
-                        .font(.system(size: 13))
                         .frame(width: 30, height: 30)
                         .background(NoteTheme.surface)
                         .clipShape(RoundedRectangle(cornerRadius: 7))
                 }
                 .menuStyle(.borderlessButton)
-                .help("Schriftart ändern")
 
                 Button {
                     isFontSizePopoverPresented.toggle()
@@ -433,18 +933,13 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 .popover(
-                    isPresented: $isFontSizePopoverPresented,
-                    arrowEdge: .bottom
+                    isPresented: $isFontSizePopoverPresented
                 ) {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Schriftgröße")
                             .font(.system(size: 13, weight: .semibold))
 
-                        Slider(
-                            value: $fontSize,
-                            in: 10...32,
-                            step: 1
-                        )
+                        Slider(value: $fontSize, in: 10...32, step: 1)
 
                         Text("\(Int(fontSize)) pt")
                             .font(.system(size: 11))
@@ -453,7 +948,6 @@ struct ContentView: View {
                     .padding(16)
                     .frame(width: 220)
                 }
-                .help("Schriftgröße ändern")
 
                 Menu {
                     ForEach(NoteFileType.allCases) { type in
@@ -473,7 +967,7 @@ struct ContentView: View {
                 } label: {
                     HStack(spacing: 5) {
                         Image(systemName: fileType.symbol)
-                        Text(fileType.rawValue.uppercased())
+                        Text(typeLabel)
                     }
                     .font(.system(size: 10, weight: .medium))
                     .padding(.horizontal, 9)
@@ -482,33 +976,70 @@ struct ContentView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 7))
                 }
                 .menuStyle(.borderlessButton)
-                .help("Dateityp ändern")
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 7) {
+                    ForEach(displayedTags, id: \.self) { tag in
+                        HStack(spacing: 5) {
+                            Text(tag)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(NoteTheme.accent)
+
+                            Button {
+                                removeTag(tag)
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(
+                                        .system(size: 8, weight: .bold)
+                                    )
+                                    .foregroundStyle(
+                                        NoteTheme.accent.opacity(0.8)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .help("Tag entfernen")
+                            .disabled(currentFileURL == nil)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(NoteTheme.selection)
+                        .clipShape(Capsule())
+                    }
+
+                    tagAddButton
+
+                    Spacer(minLength: 0)
+                }
+
+                if let currentFileURL {
+                    Text(
+                        "Zuletzt geöffnet: \(NoteFeatures.formattedDate(storage.lastOpenedDate(for: currentFileURL)))"
+                    )
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                }
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 13)
-
-            Divider()
-                .overlay(Color.white.opacity(0.04))
+            .padding(.vertical, 9)
 
             TextEditor(text: $noteText)
-                .font(
-                    .custom(
-                        fontName,
-                        size: fontSize
-                    )
-                )
+                .font(.custom(fontName, size: fontSize))
                 .scrollContentBackground(.hidden)
                 .foregroundStyle(NoteTheme.primaryText)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Divider()
-                .overlay(Color.white.opacity(0.04))
-
             HStack(spacing: 10) {
                 Circle()
-                    .fill(isDirty ? NoteTheme.accent : Color.green.opacity(0.7))
+                    .fill(
+                        isDirty
+                            ? NoteTheme.accent
+                            : Color.green.opacity(0.7)
+                    )
                     .frame(width: 6, height: 6)
 
                 Text(saveStatus)
@@ -517,9 +1048,12 @@ struct ContentView: View {
 
                 Spacer()
 
-                Button {
-                    togglePalette()
-                } label: {
+                Text("\(wordCount) Wörter · \(characterCount) Zeichen")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .help(NoteUtilities.readingTime(in: noteText))
+
+                Button(action: togglePalette) {
                     HStack(spacing: 5) {
                         Image(systemName: "command")
                         Text("Aktionen")
@@ -529,9 +1063,7 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .help("Aktionsliste öffnen (⌘ K)")
 
-                Button {
-                    saveImmediately()
-                } label: {
+                Button(action: saveImmediately) {
                     Text("Speichern")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(NoteTheme.primaryText)
@@ -549,308 +1081,66 @@ struct ContentView: View {
         .background(NoteTheme.background)
     }
 
-    // MARK: - Autosave
-
-    private func markAsChanged() {
-        guard !isLoadingNote else {
-            return
-        }
-
-        isDirty = true
-        saveStatus = "Ungespeicherte Änderungen"
-        scheduleAutosave()
+    private var typeLabel: String {
+        fileType.rawValue.uppercased()
     }
 
-    private func scheduleAutosave() {
-        autosaveTask?.cancel()
+    // MARK: - Tag Add Button
 
-        autosaveTask = Task { @MainActor in
-            do {
-                try await Task.sleep(for: .seconds(1))
-            } catch {
-                return
-            }
-
-            guard !Task.isCancelled else {
-                return
-            }
-
-            saveImmediately()
+    private var tagAddButton: some View {
+        Button {
+            newTagText = ""
+            isTagEditorPresented = true
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+                .background(NoteTheme.surface)
+                .clipShape(Circle())
+                .contentShape(Circle())
         }
-    }
+        .buttonStyle(.plain)
+        .disabled(currentFileURL == nil)
+        .help("Tag hinzufügen")
+        .popover(
+            isPresented: $isTagEditorPresented,
+            arrowEdge: .bottom
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Tag hinzufügen")
+                    .font(.system(size: 12, weight: .semibold))
 
-    // MARK: - Saving
-
-    private func saveImmediately() {
-        autosaveTask?.cancel()
-
-        do {
-            let trimmedTitle = title.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
-
-            let finalTitle = trimmedTitle.isEmpty
-                ? "Unbenannte Notiz"
-                : trimmedTitle
-
-            var destinationURL: URL
-
-            if let existingURL = currentFileURL {
-                let expectedURL = existingURL
-                    .deletingLastPathComponent()
-                    .appendingPathComponent(finalTitle)
-                    .appendingPathExtension(fileType.rawValue)
-
-                if existingURL.standardizedFileURL
-                    != expectedURL.standardizedFileURL {
-                    destinationURL = try storage.renameNote(
-                        at: existingURL,
-                        to: finalTitle
-                    )
-
-                    if destinationURL.pathExtension.lowercased()
-                        != fileType.rawValue {
-                        let correctedURL = destinationURL
-                            .deletingPathExtension()
-                            .appendingPathExtension(fileType.rawValue)
-
-                        try FileManager.default.moveItem(
-                            at: destinationURL,
-                            to: correctedURL
-                        )
-
-                        destinationURL = correctedURL
+                TextField("Name des Tags", text: $newTagText)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+                    .onSubmit {
+                        addTag()
                     }
-                } else {
-                    destinationURL = existingURL
+
+                HStack {
+                    Spacer()
+
+                    Button("Abbrechen") {
+                        isTagEditorPresented = false
+                    }
+                    .buttonStyle(.plain)
+
+                    Button("Hinzufügen") {
+                        addTag()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(NoteTheme.accent)
+                    .disabled(
+                        newTagText.trimmingCharacters(
+                            in: .whitespacesAndNewlines
+                        ).isEmpty
+                    )
                 }
-            } else {
-                destinationURL = try storage.createNote(
-                    title: finalTitle,
-                    fileType: fileType.rawValue
-                )
+                .font(.system(size: 11))
             }
-
-            try storage.save(
-                text: noteText,
-                to: destinationURL
-            )
-
-            isLoadingNote = true
-            currentFileURL = destinationURL
-            title = finalTitle
-            isDirty = false
-            saveStatus = "Gespeichert"
-
-            refreshNotes()
-
-            Task { @MainActor in
-                await Task.yield()
-                isLoadingNote = false
-            }
-        } catch {
-            saveStatus = "Speichern fehlgeschlagen"
-            saveError = error.localizedDescription
-        }
-    }
-
-    // MARK: - Opening notes
-
-    private func openNote(at url: URL) {
-        if currentFileURL?.standardizedFileURL == url.standardizedFileURL {
-            return
-        }
-
-        if isDirty || currentFileURL == nil && !noteText.isEmpty {
-            saveImmediately()
-        }
-
-        autosaveTask?.cancel()
-
-        do {
-            let loadedText = try storage.load(from: url)
-
-            isLoadingNote = true
-
-            currentFileURL = url
-            title = url.deletingPathExtension().lastPathComponent
-            noteText = loadedText
-            fileType = NoteFileType(
-                rawValue: url.pathExtension.lowercased()
-            ) ?? .txt
-
-            if !availableFonts.contains(fontName) {
-                fontName = availableFonts.first ?? "Helvetica Neue"
-            }
-
-            isDirty = false
-            saveStatus = "Gespeichert"
-            searchFocused = false
-
-            Task { @MainActor in
-                await Task.yield()
-                isLoadingNote = false
-            }
-        } catch {
-            saveError = error.localizedDescription
-        }
-    }
-
-    private func createNewNote() {
-        if isDirty {
-            saveImmediately()
-        }
-
-        autosaveTask?.cancel()
-
-        isLoadingNote = true
-        currentFileURL = nil
-        title = ""
-        noteText = ""
-        fileType = .txt
-        isDirty = false
-        saveStatus = "Neue Notiz"
-
-        Task { @MainActor in
-            await Task.yield()
-            isLoadingNote = false
-        }
-    }
-
-    // MARK: - Trash
-
-    private func deleteCurrentNote() {
-        guard let url = currentFileURL else {
-            saveError = "Es ist keine gespeicherte Notiz geöffnet."
-            return
-        }
-
-        moveNoteToTrash(at: url)
-    }
-
-    private func moveNoteToTrash(at url: URL) {
-        autosaveTask?.cancel()
-
-        let isCurrentNote = currentFileURL?.standardizedFileURL
-            == url.standardizedFileURL
-
-        do {
-            try storage.trashNote(at: url)
-
-            if isCurrentNote {
-                isLoadingNote = true
-
-                currentFileURL = nil
-                title = ""
-                noteText = ""
-                fileType = .txt
-                isDirty = false
-                saveStatus = "Notiz im Papierkorb"
-
-                Task { @MainActor in
-                    await Task.yield()
-                    isLoadingNote = false
-                }
-            }
-
-            refreshNotes()
-        } catch {
-            saveError = error.localizedDescription
-        }
-    }
-
-    // MARK: - File type
-
-    private func changeFileType(to newType: NoteFileType) {
-        guard newType != fileType else {
-            return
-        }
-
-        autosaveTask?.cancel()
-
-        do {
-            if let existingURL = currentFileURL {
-                let newURL = existingURL
-                    .deletingPathExtension()
-                    .appendingPathExtension(newType.rawValue)
-
-                if FileManager.default.fileExists(atPath: newURL.path) {
-                    saveError = "Eine Datei mit diesem Namen existiert bereits."
-                    return
-                }
-
-                try FileManager.default.moveItem(
-                    at: existingURL,
-                    to: newURL
-                )
-
-                currentFileURL = newURL
-            }
-
-            fileType = newType
-
-            if !availableFonts.contains(fontName) {
-                fontName = availableFonts.first ?? "Helvetica Neue"
-            }
-
-            if currentFileURL != nil {
-                saveImmediately()
-            } else {
-                isDirty = true
-                saveStatus = "Dateityp geändert"
-            }
-
-            refreshNotes()
-        } catch {
-            saveError = error.localizedDescription
-        }
-    }
-
-    // MARK: - Search
-
-    private func refreshNotes() {
-        notes = storage.searchNotes(query: searchQuery)
-    }
-
-    // MARK: - Command palette
-
-    private func togglePalette() {
-        if CommandPaletteController.shared.isVisible {
-            CommandPaletteController.shared.close()
-        } else {
-            CommandPaletteController.shared.show(
-                relativeTo: NSApp.keyWindow,
-                commands: paletteCommands,
-                onAction: handlePaletteCommand
-            )
-        }
-    }
-
-    private func handlePaletteCommand(_ commandID: String) {
-        CommandPaletteController.shared.close()
-
-        switch commandID {
-        case "new":
-            createNewNote()
-
-        case "search":
-            searchFocused = true
-
-        case "save":
-            saveImmediately()
-
-        case "delete":
-            deleteCurrentNote()
-
-        case "font":
-            isFontSizePopoverPresented = false
-            saveStatus = "Schriftart über das Menü ändern"
-
-        case "filetype":
-            saveStatus = "Dateityp über das Menü ändern"
-
-        default:
-            break
+            .padding(14)
+            .frame(width: 250)
         }
     }
 }
